@@ -1,139 +1,69 @@
-/*! Tabbed TOC for Blogger (simplified ES6) */
+(function(w,d){
 
-((win, doc) => {
-  const q2o = win.q2o;
+  var script = d.currentScript || d.getElementsByTagName("script")[0],
+      name   = "tabbed-toc",
+      url    = (script.getAttribute("data-url") || w.location.origin).replace(/\/+$/,""),
+      active = +script.getAttribute("data-active") || 0,
+      recent = +script.getAttribute("data-recent") || 7;
 
-  // Helpers
-  const $ = (tag, html = "", attrs = {}) => {
-    const el = doc.createElement(tag);
-    if (html) el.innerHTML = html;
-    Object.entries(attrs).forEach(([k, v]) => v !== false && el.setAttribute(k, v));
-    return el;
-  };
+  var container = d.createElement("div");
+  container.className = name;
+  container.innerHTML = '<h3 class="'+name+'-title">Tabla de Contenido</h3>'
+                      + '<nav class="'+name+'-tabs"></nav>'
+                      + '<section class="'+name+'-panels"></section>';
 
-  const on = (el, ev, fn) => el.addEventListener(ev, fn);
-  const off = (el, ev, fn) => el.removeEventListener(ev, fn);
+  var nav = container.querySelector("nav"),
+      panels = container.querySelector("section");
 
-  const insert = (parent, el, before = null) => el && parent.insertBefore(el, before);
-  const remove = el => el?.parentNode?.removeChild(el);
-
-  const canon = (url, ext = "") =>
-    (url + "").split(/[?&#]/)[0].replace(/\/+$/, "").replace(/\.[\w-]+$/, ext ? "." + ext : "");
-
-  const blogger = url =>
-    /^\d+$/.test(url)
-      ? `https://www.blogger.com/feeds/${url}/posts/summary`
-      : canon(url) + "/feeds/posts/summary";
-
-  const param = (o, sep = "&") =>
-    "?" + Object.entries(o).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join(sep);
-
-  // Core vars
-  const script = doc.currentScript;
-  const loc = win.location;
-  const storage = win.localStorage;
-  const defaults = {
-    name: "tabbed-toc",
-    url: loc.origin,
-    css: true,
-    sort: 1,
-    active: 0,
-    ad: true,
-    load: 0,
-    recent: 7,
-    query: { alt: "json", orderby: "published", "max-results": 9999, "start-index": 1 },
-    text: {
-      title: "Table of Content",
-      loading: "Loading…",
-      recent: "<sup>New!</sup>",
-      months: "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" "),
-      days: "Sun Mon Tue Wed Thu Fri Sat".split(" ")
-    }
-  };
-
-  let settings = { ...defaults, ...q2o(script.src) };
-
-  // Main container
-  const container = $("div", `<h3 class="${settings.name}-title">${settings.text.title}</h3>`, {
-    class: `${settings.name} ltr`,
-    id: `${settings.name}:${Date.now()}`
-  });
-
-  const nav = $("nav", "", { class: `${settings.name}-tabs` });
-  const panels = $("section", "", { class: `${settings.name}-panels` });
-  insert(container, nav);
-  insert(container, panels);
-
-  // Load JSONP
-  const jsonp = (url, cb) => {
-    const id = settings.name + "-jsonp-" + Date.now();
-    win[id] = data => {
-      cb(data);
-      delete win[id];
-      remove(s);
-    };
-    const s = $("script", "", { src: url + (url.includes("?") ? "&" : "?") + "callback=" + id });
-    insert(doc.head, s);
-  };
-
-  // Render categories
-  const renderCategories = feed => {
-    const cats = feed.category || [];
-    cats.sort((a, b) => a.term.localeCompare(b.term));
-    if (settings.sort === -1) cats.reverse();
-
-    cats.forEach((cat, i) => {
-      const term = cat.term;
-      const tab = $("a", term, {
-        class: `${settings.name}-tab`,
-        href: canon(settings.url) + "/search/label/" + encodeURIComponent(term),
-        "data-term": term
-      });
-      on(tab, "click", e => {
-        e.preventDefault();
-        renderPosts(term);
-      });
-      insert(nav, tab);
-      insert(panels, $("ol", "", { class: `${settings.name}-panel`, "data-term": term }));
-    });
-
-    // Auto-click active tab
-    const active = cats[settings.active]?.term;
-    if (active) renderPosts(active);
-  };
-
-  // Render posts by category
-  const renderPosts = term => {
-    const panel = panels.querySelector(`[data-term="${term}"]`);
-    if (!panel) return;
-    panel.innerHTML = `<p>${settings.text.loading}</p>`;
-    jsonp(blogger(settings.url) + "/-/" + encodeURIComponent(term) + param(settings.query), data => {
-      const entries = data.feed?.entry || [];
-      panel.innerHTML = "";
-      entries.forEach((entry, i) => {
-        const url = entry.link.find(l => l.rel === "alternate")?.href;
-        if (!url) return;
-        const li = $("li",
-          `<h5><a href="${url}">${entry.title.$t}${i < settings.recent ? settings.text.recent : ""}</a></h5>`
-        );
-        insert(panel, li);
-      });
-    });
-  };
-
-  // Inject CSS
-  if (settings.css && !doc.getElementById(settings.name + "-css")) {
-    insert(doc.head, $("link", "", {
-      id: settings.name + "-css",
-      rel: "stylesheet",
-      href: canon(script.src, "css")
-    }));
+  // JSONP helper
+  function jsonp(src, cb) {
+    var id = name + "_" + Date.now();
+    w[id] = function(data){ cb(data); delete w[id]; s.remove(); };
+    var s = d.createElement("script");
+    s.src = src + (src.indexOf("?")>-1?"&":"?") + "alt=json&callback=" + id;
+    d.head.appendChild(s);
   }
 
-  // Fire init
-  jsonp(blogger(settings.url) + param(settings.query), data => {
-    renderCategories(data.feed || {});
-    script.parentNode.insertBefore(container, script);
+  // Render categories
+  function loadCategories(feed) {
+    var cats = (feed.category||[]).map(function(c){ return c.term; }).sort();
+    cats.forEach(function(term,i){
+      var a = d.createElement("a");
+      a.textContent = term;
+      a.href = url+"/search/label/"+encodeURIComponent(term);
+      a.onclick = function(e){ e.preventDefault(); loadPosts(term); };
+      nav.appendChild(a);
+
+      var ol = d.createElement("ol");
+      ol.setAttribute("data-term",term);
+      panels.appendChild(ol);
+
+      if(i===active){ loadPosts(term); }
+    });
+  }
+
+  // Render posts by category
+  function loadPosts(term) {
+    var ol = panels.querySelector('[data-term="'+term+'"]');
+    if(!ol) return;
+    ol.innerHTML = "<li>Cargando…</li>";
+    jsonp(url+"/feeds/posts/summary/-/"+encodeURIComponent(term), function(r){
+      var entries = r.feed.entry||[];
+      ol.innerHTML = "";
+      entries.forEach(function(e,i){
+        var link = (e.link||[]).filter(function(l){return l.rel=="alternate";})[0];
+        if(!link) return;
+        var li = d.createElement("li");
+        li.innerHTML = '<a href="'+link.href+'">'+e.title.$t+(i<recent?" <sup>Nuevo!</sup>":"")+'</a>';
+        ol.appendChild(li);
+      });
+    });
+  }
+
+  // Init: load main feed to get categories
+  jsonp(url+"/feeds/posts/summary", function(r){
+    loadCategories(r.feed||{});
+    script.parentNode.insertBefore(container,script);
   });
 
-})(window, document);
+})(window,document);
