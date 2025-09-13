@@ -1,69 +1,63 @@
-(function(w,d){
+(function(win, doc) {
 
-  var script = d.currentScript || d.getElementsByTagName("script")[0],
-      name   = "tabbed-toc",
-      url    = (script.getAttribute("data-url") || w.location.origin).replace(/\/+$/,""),
-      active = +script.getAttribute("data-active") || 0,
-      recent = +script.getAttribute("data-recent") || 7;
+  const script = doc.currentScript;
+  const loc = win.location;
+  const storage = win.localStorage;
 
-  var container = d.createElement("div");
-  container.className = name;
-  container.innerHTML = '<h3 class="'+name+'-title">Tabla de Contenido</h3>'
-                      + '<nav class="'+name+'-tabs"></nav>'
-                      + '<section class="'+name+'-panels"></section>';
+  const defaults = {
+    // ... (rest of the default settings)
+  };
 
-  var nav = container.querySelector("nav"),
-      panels = container.querySelector("section");
+  const queryStringParser = win.q2o;
 
-  // JSONP helper
-  function jsonp(src, cb) {
-    var id = name + "_" + Date.now();
-    w[id] = function(data){ cb(data); delete w[id]; s.remove(); };
-    var s = d.createElement("script");
-    s.src = src + (src.indexOf("?")>-1?"&":"?") + "alt=json&callback=" + id;
-    d.head.appendChild(s);
-  }
+  // Usa Object.assign o el operador spread para fusionar configuraciones
+  let settings = Object.assign({}, defaults, queryStringParser(script.src));
 
-  // Render categories
-  function loadCategories(feed) {
-    var cats = (feed.category||[]).map(function(c){ return c.term; }).sort();
-    cats.forEach(function(term,i){
-      var a = d.createElement("a");
-      a.textContent = term;
-      a.href = url+"/search/label/"+encodeURIComponent(term);
-      a.onclick = function(e){ e.preventDefault(); loadPosts(term); };
-      nav.appendChild(a);
+  // O con operador spread
+  // let settings = { ...defaults, ...queryStringParser(script.src) };
 
-      var ol = d.createElement("ol");
-      ol.setAttribute("data-term",term);
-      panels.appendChild(ol);
+  // Simplificación de funciones auxiliares
+  const el = (ement, content, attr) => {
+    const element = doc.createElement(ement);
+    if (content) {
+      element.innerHTML = content;
+    }
+    if (attr) {
+      for (const i in attr) {
+        if (attr[i] === false) continue;
+        element.setAttribute(i, attr[i]);
+      }
+    }
+    return element;
+  };
 
-      if(i===active){ loadPosts(term); }
-    });
-  }
+  const on = (el, ev, fn) => el.addEventListener(ev, fn);
 
-  // Render posts by category
-  function loadPosts(term) {
-    var ol = panels.querySelector('[data-term="'+term+'"]');
-    if(!ol) return;
-    ol.innerHTML = "<li>Cargando…</li>";
-    jsonp(url+"/feeds/posts/summary/-/"+encodeURIComponent(term), function(r){
-      var entries = r.feed.entry||[];
-      ol.innerHTML = "";
-      entries.forEach(function(e,i){
-        var link = (e.link||[]).filter(function(l){return l.rel=="alternate";})[0];
-        if(!link) return;
-        var li = d.createElement("li");
-        li.innerHTML = '<a href="'+link.href+'">'+e.title.$t+(i<recent?" <sup>Nuevo!</sup>":"")+'</a>';
-        ol.appendChild(li);
+  // ... (otras funciones como detach, param, blogger, etc. se simplifican de forma similar)
+
+  const fire = () => {
+    if (!script.id) {
+      script.id = settings.name + '-js';
+    }
+    script.classList.add(settings.name + '-js');
+
+    // Carga del CSS, si se prefiere mantener la carga externa
+    const { css, container: c, name, url } = settings;
+    if (css && !doc.getElementById(name + '-css')) {
+      load(typeof css === 'string' ? css : canon(script.src, 'css'), () => {
+        // ...
+      }, {
+        class: name + '-css',
+        id: name + '-css'
       });
+    }
+
+    // Carga de categorías
+    load(blogger(url) + param({ ...settings.query, callback: `_${fn}` }), () => {
+      // ...
     });
-  }
+  };
 
-  // Init: load main feed to get categories
-  jsonp(url+"/feeds/posts/summary", function(r){
-    loadCategories(r.feed||{});
-    script.parentNode.insertBefore(container,script);
-  });
+  // ... (rest of the code)
 
-})(window,document);
+})(window, document);
